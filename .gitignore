@@ -1,0 +1,35 @@
+# Bağımlılıklar
+node_modules/
+dist/
+
+# İkili Dosyalar ve İndirilen Motorlar
+bin/
+*.exe
+
+# Hassas Bilgiler ve Ortam Değişkenleri
+.env
+.env.local
+.env.*.local
+cookies.txt
+
+# Log Dosyaları
+bot.log
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dinamik Durum ve Geçici Dosyalar
+active_channels.json
+crash_state.json
+crash_reason.txt
+*.tmp*
+*.bak
+
+# Yedekler (İçinde eski token ve şifre barındırabilir)
+yedek/
+
+# İşletim Sistemi Kalıntıları
+.DS_Store
+Thumbs.db
