@@ -44,6 +44,7 @@ class MusicPlayer {
         this.processes        = { ytdlp: null, ffmpeg: null };
         this.activeStream     = null;
         this.state            = { loop: false, paused: false, isSkipping: false };
+        this.isTransitioning  = false;
         this.volume           = 0.5;
         this.textChannel      = null;
         this.lastMessage      = null;
@@ -83,6 +84,11 @@ class MusicPlayer {
 
         // Boşta kalma (Idle) olayı
         this.player.on(AudioPlayerStatus.Idle, () => {
+            // Şarkı geçişi veya temizliği sürerken gelen Idle olaylarını yoksay
+            if (this.isTransitioning) {
+                logger(`[PLAYER] Idle tetiklendi ancak sarki degisimi/temizligi devrede, yoksayildi.`, "DEBUG");
+                return;
+            }
             if (this.state.paused) {
                 logger(`[PLAYER] Idle tetiklendi ama PAUSED durumunda, yoksayildi.`, "DEBUG");
                 return;
@@ -107,6 +113,26 @@ class MusicPlayer {
 
         // Player hatası
         this.player.on("error", (err) => {
+            const failedSeq = err.resource?.metadata?.seq;
+            const isStale = failedSeq && failedSeq !== this.playSeq;
+
+            // 1) Eğer hata önceki bir şarkının atlanmasından/kapatılmasından kalmışsa tamamen yoksay
+            if (isStale) {
+                logger(`[PLAYER] Onceki sarki akis sonlanmasi yoksayildi (Seq: #${failedSeq} != #${this.playSeq}) | ${err.message}`, "DEBUG");
+                return;
+            }
+
+            // 2) Eğer hata geçiş/atlama/temizlik sırasında oluşan bir "Premature close" ise
+            const isPrematureClose = err.message && err.message.includes("Premature close");
+            if (this.isTransitioning || isPrematureClose) {
+                logger(`[PLAYER] Akis sonlanmasi (Premature close / Transition). Siradakine geciliyor... | Sarki: "${this.current ? this.current.title : "?"}"`, "DEBUG");
+                if (!this.isTransitioning) {
+                    this.next();
+                }
+                return;
+            }
+
+            // 3) Gerçek beklenmedik bir oynatıcı hatası ise kullanıcıya bildir ve sonraki şarkıya geç
             logger(`[PLAYER] Oynatici Hatasi: ${err.message} | Sarki: "${this.current ? this.current.title : "?"}" | Sunucu: ${this.guildId}`, "ERROR");
             if (this.current && _discordClient) {
                 notifyRequesterAboutError(_discordClient, this.current, err, "AudioPlayer Oynatıcı Hatası");
@@ -247,6 +273,7 @@ class MusicPlayer {
 
     async play(song) {
         managers.set(this.guildId, this);
+        this.isTransitioning = true;
         this.clearIdleTimer();
         this.clearProgressInterval();
         this.cleanup();
@@ -259,7 +286,7 @@ class MusicPlayer {
         this.totalPcmBytesReceived = 0;
         const currentSeq = ++this.playSeq;
         const hasCookies = fs.existsSync(COOKIES_PATH);
-        logger(`[PLAY] Baslatiliyor: "${song.title}" | Tur: ${song.isLive ? "CANLI" : "Normal"} | Cookies: ${hasCookies ? "VAR" : "YOK"} | Sunucu: ${this.guildId}`, "INFO");
+        logger(`[PLAY] Baslatiliyor: "${song.title}" (Seq: #${currentSeq}) | Tur: ${song.isLive ? "CANLI" : "Normal"} | Cookies: ${hasCookies ? "VAR" : "YOK"} | Sunucu: ${this.guildId}`, "INFO");
 
         try {
             const ytdlpArgs = [
@@ -271,8 +298,7 @@ class MusicPlayer {
                 "--no-warnings",
                 "--no-playlist",
                 "--buffer-size", "64K",
-                "--http-chunk-size", "10M",
-                "--socket-timeout", "15",
+                "--socket-timeout", "30",
                 song.url
             ];
             logger(`[PROCESS] yt-dlp akış motoru başlatılıyor -> "${song.title}"`, "DEBUG");
@@ -363,6 +389,11 @@ class MusicPlayer {
 
             const stream = new PassThrough({ highWaterMark: 1024 * 1024 * 4 });
             this.activeStream = stream;
+            stream.on("error", (err) => {
+                if (err.message && err.message.includes("Premature close")) return;
+                logger(`[STREAM/ERR] PassThrough akış hatası: ${err.message}`, "DEBUG");
+            });
+
             this.processes.ffmpeg.stdout.pipe(stream);
 
             const TARGET_PREBUFFER_BYTES = 160000; // ~0.85 saniye PCM ön arabellek
@@ -372,9 +403,14 @@ class MusicPlayer {
                 hasStartedPlayback = true;
                 this.clearWatchdog();
 
-                this.resource = createAudioResource(stream, { inputType: StreamType.Raw, inlineVolume: true });
+                this.resource = createAudioResource(stream, {
+                    inputType: StreamType.Raw,
+                    inlineVolume: true,
+                    metadata: { seq: currentSeq, song }
+                });
                 this.resource.volume.setVolume(this.volume);
                 this.player.play(this.resource);
+                this.isTransitioning = false; // Geçiş bitti, artık parça normal çalıyor!
                 this.songStartTime = Date.now();
                 this.startProgressInterval();
                 recordGuildPlay(this.guildId, song);
@@ -414,6 +450,7 @@ class MusicPlayer {
             this.updateUI(song, "new");
 
         } catch (e) {
+            this.isTransitioning = false;
             logger(`[PLAY] Oynatma baslatma hatasi: ${e.message} | Sarki: "${song.title}" | Sunucu: ${this.guildId}`, "ERROR");
             if (_discordClient) notifyRequesterAboutError(_discordClient, song, e, "Akış Başlatma");
             if (this.textChannel) {
@@ -605,6 +642,7 @@ class MusicPlayer {
             await this.setTempFooter("⚠️ Kuyrukta geçilecek başka parça yok!");
             return;
         }
+        this.isTransitioning = true;
         this.clearProgressInterval();
         this.cleanup();
         if (this.lastMessage && this.queue.length > 0) {
@@ -624,23 +662,50 @@ class MusicPlayer {
         this.clearProgressInterval();
         this.clearWatchdog();
         this.playSeq++;
+        this.isTransitioning = true;
         let killed = false;
 
-        if (this.processes.ytdlp) {
-            try { this.processes.ytdlp.stdout && this.processes.ytdlp.stdout.unpipe(); } catch (_) {}
-            try { this.processes.ytdlp.kill("SIGKILL"); killed = true; } catch (_) {}
-            try { this.processes.ytdlp.kill(); } catch (_) {}
+        // 1. Önce AudioPlayer'ı durdur (kaynak dinleyicilerini koparır)
+        if (this.player) {
+            try { this.player.stop(true); } catch (_) {}
         }
-        if (this.processes.ffmpeg) {
-            try { this.processes.ffmpeg.stdin && this.processes.ffmpeg.stdin.unpipe(); } catch (_) {}
-            try { this.processes.ffmpeg.stdout && this.processes.ffmpeg.stdout.unpipe(); } catch (_) {}
-            try { this.processes.ffmpeg.kill("SIGKILL"); killed = true; } catch (_) {}
-            try { this.processes.ffmpeg.kill(); } catch (_) {}
-        }
+
+        // 2. Aktif PassThrough akışını güvenle sonlandır
         if (this.activeStream) {
-            try { this.activeStream.destroy(); } catch (_) {}
+            try {
+                this.activeStream.removeAllListeners("error");
+                this.activeStream.on("error", () => {});
+                this.activeStream.destroy();
+            } catch (_) {}
             this.activeStream = null;
         }
+
+        // 3. Çocuk süreçleri (ffmpeg ve yt-dlp) temizle
+        if (this.processes.ffmpeg) {
+            try {
+                this.processes.ffmpeg.stdout && this.processes.ffmpeg.stdout.removeAllListeners("error");
+                this.processes.ffmpeg.stdout && this.processes.ffmpeg.stdout.on("error", () => {});
+                this.processes.ffmpeg.stdout && this.processes.ffmpeg.stdout.unpipe();
+                this.processes.ffmpeg.stdin && this.processes.ffmpeg.stdin.removeAllListeners("error");
+                this.processes.ffmpeg.stdin && this.processes.ffmpeg.stdin.on("error", () => {});
+                this.processes.ffmpeg.stdin && this.processes.ffmpeg.stdin.unpipe();
+                this.processes.ffmpeg.kill("SIGKILL");
+                this.processes.ffmpeg.kill();
+                killed = true;
+            } catch (_) {}
+        }
+
+        if (this.processes.ytdlp) {
+            try {
+                this.processes.ytdlp.stdout && this.processes.ytdlp.stdout.removeAllListeners("error");
+                this.processes.ytdlp.stdout && this.processes.ytdlp.stdout.on("error", () => {});
+                this.processes.ytdlp.stdout && this.processes.ytdlp.stdout.unpipe();
+                this.processes.ytdlp.kill("SIGKILL");
+                this.processes.ytdlp.kill();
+                killed = true;
+            } catch (_) {}
+        }
+
         this.processes = { ytdlp: null, ffmpeg: null };
         if (killed) logger(`[CLEANUP] yt-dlp ve ffmpeg surecleri temizlendi. Sunucu: ${this.guildId}`, "DEBUG");
     }
