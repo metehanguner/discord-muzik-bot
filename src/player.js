@@ -360,6 +360,16 @@ class MusicPlayer {
                 if (hasStartedPlayback || this.playSeq !== currentSeq) return;
                 hasStartedPlayback = true;
                 this.clearWatchdog();
+
+                // AKILLI YEDEK ARAMA (Smart Fallback):
+                // Eğer doğrudan video URL'si silinmiş/erişilemez ise, şarkı adıyla alternatif video ara ve çal
+                if (!song._fallbackAttempted && song.title && typeof song.url === "string" && !song.url.startsWith("ytsearch")) {
+                    logger(`[STREAM_FAIL] "${song.title}" linki calismadi (${reason}). Otomatik arama ile alternatif akis baslatiliyor...`, "WARNING");
+                    song._fallbackAttempted = true;
+                    song.url = `ytsearch1:${song.title}`;
+                    return this.play(song);
+                }
+
                 logger(`[STREAM_FAIL] Akış başlatılamadı (${source}): ${reason} | "${song.title}"`, "WARNING");
                 if (this.textChannel) {
                     const failEmbed = new EmbedBuilder()
