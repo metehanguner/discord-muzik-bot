@@ -13,7 +13,7 @@ const { AudioPlayerStatus } = require("@discordjs/voice");
 //  MODÜL İTHALATLARI (Clean Architecture)
 // ============================================================
 const { DISCORD_TOKEN, COOKIES_PATH, CHANNELS_FILE, CRASH_FILE } = require("./src/config");
-const { logger, extractUserInfo, notifyRequesterAboutError } = require("./src/logger");
+const { logger, logSessionStart, extractUserInfo, notifyRequesterAboutError } = require("./src/logger");
 const { getDB, saveToDB, removeFromDB, saveActiveChannel, getActiveChannels } = require("./src/db");
 const { ensureYtDlp, resolve } = require("./src/resolver");
 const { managers, getManager, setDiscordClient } = require("./src/player");
@@ -23,6 +23,7 @@ logger("════════════════════════
 logger(`Bot sureci baslatildi | PID: ${process.pid} | Node: ${process.version}`, "SYSTEM");
 logger(`Platform: ${process.platform} | Arch: ${process.arch} | CPU Onceligi: YUKSEK (ABOVE_NORMAL)`, "SYSTEM");
 logger("═══════════════════════════════════════════════════════", "SYSTEM");
+logSessionStart();
 
 // ============================================================
 //  DISCORD CLIENT

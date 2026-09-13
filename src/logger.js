@@ -1,25 +1,68 @@
-const fs = require("fs");
+const fs   = require("fs");
+const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 const { LOG_FILE } = require("./config");
 
 // ============================================================
 //  LOGGING SiSTEMi  |  Seviyeler: SYSTEM | INFO | DEBUG | WARNING | ERROR | FATAL
+//
+//  KURAL: DEBUG seviyesi YALNIZCA konsola yazilir, bot.log'a yazilmaz.
+//  Boylece bot.log sadece onemli olaylari icerir ve AI/insan tarafindan
+//  kolayca okunabilir. Boyut limiti: 5MB (asilinca otomatik arsivlenir).
 // ============================================================
-const logStream = fs.createWriteStream(LOG_FILE, { flags: "a", encoding: "utf8" });
+
+// --- Log Rotation: bot.log 5MB'i asinca arsivle ---
+function rotateLogs() {
+    try {
+        if (fs.existsSync(LOG_FILE)) {
+            const { size } = fs.statSync(LOG_FILE);
+            if (size > 5 * 1024 * 1024) { // 5MB
+                const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+                const archivePath = LOG_FILE.replace(".log", `_arsiv_${ts}.log`);
+                fs.renameSync(LOG_FILE, archivePath);
+                // Yeni bos dosya olusturulacak (writeStream ilk yazida yaratir)
+            }
+        }
+    } catch (_) {}
+}
+rotateLogs();
+
+let logStream = fs.createWriteStream(LOG_FILE, { flags: "a", encoding: "utf8" });
 let lastErrorLog = "";
 const recentLogs = [];
+
+// Dosyaya yazilacak seviyeler (DEBUG ve TRACE haric)
+const FILE_LEVELS = new Set(["SYSTEM", "INFO", "WARNING", "ERROR", "FATAL"]);
 
 function logger(msg, level = "INFO") {
     const time = new Date().toLocaleString("tr-TR");
     const logText = `[${time}] [${level.padEnd(7)}] ${msg}\n`;
     process.stdout.write(logText);
-    try { logStream.write(logText); } catch (_) {}
+
+    // DEBUG loglar YALNIZCA konsola gider, bot.log'a yazilmaz
+    if (FILE_LEVELS.has(level)) {
+        try { logStream.write(logText); } catch (_) {}
+    }
 
     recentLogs.push(logText.trim());
     if (recentLogs.length > 20) recentLogs.shift();
     if (level === "ERROR" || level === "FATAL" || level === "WARNING") {
         lastErrorLog = logText.trim();
     }
+}
+
+// Her restart'ta oturum bilgisini logla (AI icin kolayca restart izleme)
+function logSessionStart() {
+    const sessionLog = LOG_FILE.replace(".log", ".sessions.log");
+    const sessionCount = (() => {
+        try {
+            const data = fs.readFileSync(sessionLog, "utf8");
+            return (data.match(/SESSION #/g) || []).length + 1;
+        } catch (_) { return 1; }
+    })();
+    const line = `[${new Date().toLocaleString("tr-TR")}] SESSION #${sessionCount} | PID: ${process.pid} | Node: ${process.version}\n`;
+    try { fs.appendFileSync(sessionLog, line, "utf8"); } catch (_) {}
+    logger(`[STARTUP] Oturum No: #${sessionCount} | PID: ${process.pid}`, "SYSTEM");
 }
 
 // Kullanıcı bilgi ayıklayıcı
@@ -117,6 +160,7 @@ function formatMarkdownTitle(title, maxLen = 60) {
 
 module.exports = {
     logger,
+    logSessionStart,
     extractUserInfo,
     notifyRequesterAboutError,
     formatTime,

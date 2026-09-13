@@ -66,7 +66,7 @@ Bot, kurumsal seviyede sürdürülebilirlik sağlamak için **modüler mimariye 
 | :--- | :--- |
 | [`index.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/index.js) | **Giriş ve Olay Yöneticisi (~470 satır).** Discord Client, Gateway olayları (`ClientReady`, `MessageCreate`, `InteractionCreate`, `VoiceStateUpdate`), güvenli kapatma (`shutdown`) ve çökme koruması. |
 | [`src/config.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/src/config.js) | **Sistem Konfigürasyonu:** `.env` yükleyici, CPU öncelik ayarı (`ABOVE_NORMAL`), dosya yolları (`YTDLP_PATH`, `DB_FILE` vb.) ve Spotify regex/anahtarları. |
-| [`src/logger.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/src/logger.js) | **Loglama & Yardımcılar:** Dosya ve konsol loglayıcı, `notifyRequesterAboutError` (kullanıcıya DM hata iletimi), süre ve ilerleme çubuğu, `formatMarkdownTitle` (Markdown link bozulma koruması). |
+| [`src/logger.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/src/logger.js) | **Loglama & Yardımcılar:** Dosya ve konsol loglayıcı. **KURAL:** `DEBUG` seviyesi yalnızca konsola yazılır, `bot.log`'a yazılmaz — dosyaya sadece `SYSTEM/INFO/WARNING/ERROR/FATAL` gider. Log rotation (5MB limiti) ve `logSessionStart()` (oturum numaralama) dahil. |
 | [`src/db.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/src/db.js) | **Veritabanı Katmanı:** `music_db.json` erişimi, `saveToDB` (favori ekleme), `recordGuildPlay` (gerçek çalma sayacı), `removeFromDB`, aktif kanal kaydı. |
 | [`src/resolver.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/src/resolver.js) | **Ses Çözümleme Katmanı:** Spotify API + Embed scraper, YouTube arama, yt-dlp otomatik kurulumu (`ensureYtDlp`) ve `resolve()` fonksiyonu. |
 | [`src/player.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/src/player.js) | **Ses & Oynatıcı Motoru:** `MusicPlayer` sınıfı, yt-dlp -> ffmpeg PCM akışı, prebuffering (~160KB), takılma koruması, UI güncelleme ve ses kontrolleri. |
@@ -77,6 +77,9 @@ Bot, kurumsal seviyede sürdürülebilirlik sağlamak için **modüler mimariye 
 | `active_channels.json` | Çökme sonrası kurtarma bildirimleri için en son müzik çalınan metin kanalları. |
 | `bin/yt-dlp.exe` | YouTube ve ses çıkarma ikili motoru (yoksa otomatik indirilir). |
 | `yedek/` | Çalışan kararlı sürümlerin tam yedekleri. |
+| `bot.log` | Ana log dosyası. Yalnızca `INFO` ve üzeri seviyeler yazılır. 5MB limitinde otomatik arşivlenir. |
+| `bot_arsiv_<tarih>.log` | `bot.log` 5MB'ı aşınca otomatik oluşturulan arşiv dosyası. |
+| `bot.sessions.log` | Her restart'ta tek satır oturum özeti. Restart geçmişini takip etmek için okunur. |
 
 ---
 
@@ -200,3 +203,58 @@ Gelecekte bu projede bir geliştirme veya hata ayıklama yapacak bir AI şunlara
 3. **Yedekleme:** Büyük bir özellik eklenmeden veya mimari değiştirilmeden önce `yedek/` klasörü altına tarihli temiz bir kopya alınmalıdır.
 4. **Ecosystem ve Dizinler:** `ecosystem.config.js` içindeki `C:\Users\Administrator\...` yolunu değiştirmeyin; o yol uzak sunucu içindir.
 5. **Senkron Fonksiyonlardan Kaçının:** Ses boru hattını (`playNext`, `PassThrough`) etkileyecek döngülerde senkron ağır işlemler (blocking I/O) yapmayın.
+6. **Loglama Kuralı — DEBUG'ı dosyaya YAZMA:** `logger(msg, "DEBUG")` çağrısı yalnızca konsola gider, `bot.log`'a yazılmaz. Bu kasıtlı bir tasarımdır. `bot.log`'u anlamlı tutmak için yeni eklenecek rutin/periyodik debug satırlarını `"DEBUG"` seviyesiyle yaz; önemli olayları `"INFO"` ile yaz.
+
+---
+
+## 10. LOGLAMA SİSTEMİ — KURALLAR VE DOSYALAR
+
+### Log Seviyeleri ve Davranışları
+
+| Seviye | Konsol | bot.log | Ne Zaman Kullanılır |
+| :--- | :---: | :---: | :--- |
+| `SYSTEM` | ✅ | ✅ | Bot başlatma, Gateway bağlantısı, kritik sistem olayları |
+| `INFO` | ✅ | ✅ | Şarkı başlatma, kuyruk geçişi, kullanıcı bildirimi |
+| `WARNING` | ✅ | ✅ | Takılma tespiti, DM gönderilemedi, beklenmedik ama tolere edilebilir durum |
+| `ERROR` | ✅ | ✅ | Çözülemeyen hata, promise reddi, API hatası |
+| `FATAL` | ✅ | ✅ | Kritik çökme, process.exit öncesi |
+| `DEBUG` | ✅ | ❌ | UI güncellemeleri, akış sağlık ölçümleri, periyodik rutin bilgiler |
+
+> **Kural:** `DEBUG` seviyesi **asla `bot.log`'a yazılmaz.** Bu sayede `bot.log` yalnızca anlamlı olayları içerir ve AI/insan tarafından kolayca analiz edilebilir.
+
+### Log Dosyaları
+
+```
+bot.log             ← Ana log. Sadece INFO+ olaylar. 5MB limitinde arşivlenir.
+bot_arsiv_<ts>.log  ← 5MB aşılınca otomatik oluşan arşiv.
+bot.sessions.log    ← Her restart'ta tek satır. Örnek:
+                       [13.09.2026 18:57] SESSION #118 | PID: 3312 | Node: v26.0.0
+```
+
+### Uzak Sunucudan Log Okuma (AI İçin)
+
+Uzak sunucu loglarını okumak için `ssh2` paketi kullanılır. Proje dizininde `deploy.js` ve `monitor_server.js` referans alınabilir. Temel yöntem:
+
+```js
+// Proje dizininde node ile çalıştır (node_modules/ssh2 burada)
+const { Client } = require('ssh2');
+require('dotenv').config();
+const conn = new Client();
+conn.on('ready', () => {
+    conn.exec(`powershell -Command "Get-Content 'C:\\...\\bot.log' -Tail 100"`, (err, stream) => {
+        stream.on('data', d => process.stdout.write(d));
+        stream.on('close', () => conn.end());
+    });
+}).connect({
+    host: process.env.SSH_HOST, port: 22,
+    username: process.env.SSH_USER, password: process.env.SSH_PASSWORD
+});
+```
+
+### Oturum Geçmişini Okuma
+
+`bot.sessions.log` dosyası restart geçmişini tutar. Toplam restart sayısını görmek için:
+```powershell
+(Get-Content 'bot.sessions.log' | Select-String 'SESSION').Count
+```
+
