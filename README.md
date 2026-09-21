@@ -24,7 +24,6 @@
 | 🔁 **Otomatik Kurtarma** | Çökme sonrası PM2 ile anında yeniden başlatma ve son aktif kanala bildirim |
 | 💾 **Felaket Kurtarma DB** | Atomik `.tmp → rename` yazım + `.bak` otoyedeği ile favori ve istatistikler asla kaybolmaz |
 | 📊 **Top 20 & Favoriler** | Sunucuya özel anlık dinlenme istatistiği ve kişisel müzik arşivi |
-| 🖥️ **Canlı Web Dashboard** | SSH üzerinden uzak sunucu loglarını tarayıcıda gerçek zamanlı izleme (port 3333) |
 | 📬 **DM Hata Bildirimi** | Şarkı oynatılamazsa, şarkıyı isteyen kullanıcıya Discord DM ile hata özeti gönderilir |
 | 📝 **Akıllı Loglama** | `DEBUG` yalnızca konsola gider; `bot.log` sadece anlamlı olayları içerir (5MB rotation) |
 
@@ -43,7 +42,6 @@ muzik-botu/
 │   ├── resolver.js             # Spotify Embed scraper + YouTube çözümleme
 │   └── menus.js                # .listem, .popüler, .kuyruk, .yardım arayüzleri
 ├── deploy.js                   # SFTP + PM2 tek-komut deployer
-├── monitor_server.js           # Canlı SSH log sunucusu (port 3333)
 ├── ecosystem.config.js         # PM2 üretim yapılandırması
 └── PROJE_REHBERI_VE_MIMARI.md  # Kapsamlı mimari ve geliştirici rehberi
 ```

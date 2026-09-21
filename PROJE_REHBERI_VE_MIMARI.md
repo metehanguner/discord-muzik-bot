@@ -233,7 +233,7 @@ bot.sessions.log    ← Her restart'ta tek satır. Örnek:
 
 ### Uzak Sunucudan Log Okuma (AI İçin)
 
-Uzak sunucu loglarını okumak için `ssh2` paketi kullanılır. Proje dizininde `deploy.js` ve `monitor_server.js` referans alınabilir. Temel yöntem:
+Uzak sunucu loglarını okumak için `ssh2` paketi kullanılır. Proje dizininde `deploy.js` ve `fetch_tail.js` referans alınabilir. Temel yöntem:
 
 ```js
 // Proje dizininde node ile çalıştır (node_modules/ssh2 burada)
