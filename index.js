@@ -12,7 +12,7 @@ const { AudioPlayerStatus } = require("@discordjs/voice");
 // ============================================================
 //  MODÜL İTHALATLARI (Clean Architecture)
 // ============================================================
-const { DISCORD_TOKEN, COOKIES_PATH, CHANNELS_FILE, CRASH_FILE } = require("./src/config");
+const { DISCORD_TOKEN, COOKIES_PATH, CHANNELS_FILE, CRASH_FILE, TEXT_CHANNEL_ID } = require("./src/config");
 const { logger, logSessionStart, extractUserInfo, notifyRequesterAboutError } = require("./src/logger");
 const { getDB, saveToDB, removeFromDB, saveActiveChannel, getActiveChannels } = require("./src/db");
 const { ensureYtDlp, resolve } = require("./src/resolver");
@@ -49,6 +49,7 @@ client.once(Events.ClientReady, async () => {
     logger(`[SODIUM] libsodium hazir.`, "DEBUG");
     await ensureYtDlp();
     logger(`[STARTUP] ${client.user.tag} basariyla giris yapti ve aktif!`, "SYSTEM");
+    client.user.setActivity("Admeliora Music Player | .çal", { type: 2 }); // 2 is Listening
     logger(`[STARTUP] Sunucu sayisi: ${client.guilds.cache.size}`, "INFO");
     logger(`[STARTUP] Cookies: ${fs.existsSync(COOKIES_PATH) ? "VAR" : "YOK"}`, "INFO");
 
@@ -97,6 +98,13 @@ client.on(Events.MessageCreate, async (msg) => {
         args = ["ekle", ...content.split(/\s+/).slice(2)];
     } else {
         return;
+    }
+
+    // Kanal Kısıtlaması: Belirli bir metin kanalı tanımlandıysa sadece orada komut kabul et
+    if (TEXT_CHANNEL_ID && msg.channel.id !== TEXT_CHANNEL_ID) {
+        setTimeout(() => msg.delete().catch(() => {}), 1500);
+        return msg.channel.send(`⚠️ Müzik komutlarını yalnızca <#${TEXT_CHANNEL_ID}> kanalında kullanabilirsiniz!`)
+            .then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
     }
 
     const manager = getManager(msg.guild.id);
@@ -355,6 +363,13 @@ client.on(Events.InteractionCreate, async (i) => {
     // Sadece ana oynatıcı butonları ("m_" ile başlayanlar) burada işlenir.
     // Menü butonları (top_play_all, fav_play_all, search_btn_*, queue_*) kendi collector'larında işlenir.
     if (!i.customId.startsWith("m_")) return;
+
+    if (TEXT_CHANNEL_ID && i.channelId !== TEXT_CHANNEL_ID) {
+        return i.reply({
+            content: `⚠️ Müzik kontrollerini yalnızca <#${TEXT_CHANNEL_ID}> kanalında kullanabilirsiniz!`,
+            flags: [MessageFlags.Ephemeral]
+        }).catch(() => {});
+    }
 
     logger(`[BUTTON] Tiklandi: "${i.customId}" | Kullanici: ${i.user.tag} (${i.user.id}) | Sunucu: ${i.guildId}`, "INFO");
 

@@ -20,6 +20,7 @@ const CHANNELS_FILE= path.join(ROOT_DIR, "active_channels.json");
 const CRASH_FILE   = path.join(ROOT_DIR, "crash_state.json");
 
 const DISCORD_TOKEN        = process.env.TOKEN || process.env.DISCORD_TOKEN || null;
+const TEXT_CHANNEL_ID       = process.env.TEXT_CHANNEL_ID       || null;
 const SPOTIFY_CLIENT_ID     = process.env.SPOTIFY_CLIENT_ID     || null;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || null;
 const SPOTIFY_RE            = /open\.spotify\.com\/(?:intl-[a-z0-9_-]+\/)?(track|playlist|album)\/([A-Za-z0-9]+)/i;
@@ -27,6 +28,7 @@ const SPOTIFY_RE            = /open\.spotify\.com\/(?:intl-[a-z0-9_-]+\/)?(track
 module.exports = {
     ROOT_DIR,
     DISCORD_TOKEN,
+    TEXT_CHANNEL_ID,
     YTDLP_ASSET,
     YTDLP_PATH,
     COOKIES_PATH,
