@@ -18,6 +18,8 @@ const { getDB, saveToDB, removeFromDB, saveActiveChannel, getActiveChannels } = 
 const { ensureYtDlp, resolve } = require("./src/resolver");
 const { managers, getManager, setDiscordClient } = require("./src/player");
 const { showFavoritesMenu, showPopularMenu, showQueueMenu, showHelpMenu } = require("./src/menus");
+const { interactionToCommand, registerSlashCommands, registerForGuild, isKnownDotCommand, matchDotCommands, buildDotSuggestionEmbed } = require("./src/slash");
+const { initTracker, triggerTestCall, getTrackerStatus } = require("./src/tracker");
 
 logger("═══════════════════════════════════════════════════════", "SYSTEM");
 logger(`Bot sureci baslatildi | PID: ${process.pid} | Node: ${process.version}`, "SYSTEM");
@@ -33,7 +35,9 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildPresences,
+        GatewayIntentBits.GuildMembers
     ]
 });
 
@@ -49,9 +53,11 @@ client.once(Events.ClientReady, async () => {
     logger(`[SODIUM] libsodium hazir.`, "DEBUG");
     await ensureYtDlp();
     logger(`[STARTUP] ${client.user.tag} basariyla giris yapti ve aktif!`, "SYSTEM");
-    client.user.setActivity("Admeliora Music Player | .çal", { type: 2 }); // 2 is Listening
+    client.user.setActivity("Admeliora Music Player | /cal | .çal", { type: 2 }); // 2 is Listening
     logger(`[STARTUP] Sunucu sayisi: ${client.guilds.cache.size}`, "INFO");
     logger(`[STARTUP] Cookies: ${fs.existsSync(COOKIES_PATH) ? "VAR" : "YOK"}`, "INFO");
+    await registerSlashCommands(client);
+    initTracker(client);
 
     // Otomatik Kurtarma Bildirimi Kontrolü
     if (fs.existsSync(CRASH_FILE)) {
@@ -107,10 +113,29 @@ client.on(Events.MessageCreate, async (msg) => {
             .then(m => setTimeout(() => m.delete().catch(() => {}), 5000));
     }
 
+    // Nokta ile başlayıp tam komut olmayan yazım (".", ".ç" ...) -> eşleşen komutları listele
+    if (content.startsWith(".") && !isKnownDotCommand(cmd)) {
+        const matches = matchDotCommands(cmd);
+        if (!matches) return;
+        setTimeout(() => msg.delete().catch(() => {}), 1500);
+        logger(`[CMD] Komut onerisi: ".${cmd}" -> ${matches.length} eslesme | Kullanici: ${msg.author.tag}`, "DEBUG");
+        const sm = await msg.channel.send({ embeds: [buildDotSuggestionEmbed(cmd, matches)] }).catch(() => null);
+        if (sm) setTimeout(() => sm.delete().catch(() => {}), 20000);
+        return;
+    }
+
+    setTimeout(() => msg.delete().catch(() => {}), 2000);
+    return handleCommand(msg, cmd, args);
+});
+
+// ============================================================
+//  ORTAK KOMUT İŞLEYİCİ (nokta komutları ve slash komutları aynı yolu kullanır)
+//  msg: { author, member, guild, channel } alanlarını taşıyan mesaj veya slash bağlamı
+// ============================================================
+async function handleCommand(msg, cmd, args) {
     const manager = getManager(msg.guild.id);
     manager.textChannel = msg.channel;
     saveActiveChannel(msg.guild.id, msg.channel.id);
-    setTimeout(() => msg.delete().catch(() => {}), 2000);
     logger(`[CMD] .${cmd}${args.length ? " " + args.join(" ") : ""} | Kullanici: ${msg.author.tag} (${msg.author.id}) | Sunucu: ${msg.guild.name} (${msg.guild.id}) | Kanal: #${msg.channel.name}`, "INFO");
 
     // --- .yardım / .help / .komutlar ---
@@ -353,12 +378,58 @@ client.on(Events.MessageCreate, async (msg) => {
         manager.destroy();
         msg.channel.send("⏹️ Müzik durduruldu ve ses kanalından ayrıldı.").then(m => setTimeout(() => m.delete().catch(() => {}), 4000));
     }
-});
+
+    // --- .ara-test / .aratest (Telefon Arama / Bildirim Testi) ---
+    else if (cmd === "ara-test" || cmd === "aratest" || cmd === "calltest") {
+        const testRes = await triggerTestCall();
+        return msg.channel.send(testRes.message).then(m => setTimeout(() => m.delete().catch(() => {}), 10000));
+    }
+
+    // --- .takip / .takip-durum ---
+    else if (cmd === "takip" || cmd === "takip-durum") {
+        const statusMsg = getTrackerStatus(client);
+        return msg.channel.send(statusMsg).then(m => setTimeout(() => m.delete().catch(() => {}), 15000));
+    }
+}
+
+// ============================================================
+//  SLASH KOMUTLARI ("/" yazınca çıkan liste)
+// ============================================================
+async function handleSlashCommand(i) {
+    if (!i.guild) {
+        return i.reply({ content: "⚠️ Bu komut yalnızca sunucularda kullanılabilir.", flags: [MessageFlags.Ephemeral] }).catch(() => {});
+    }
+    if (TEXT_CHANNEL_ID && i.channelId !== TEXT_CHANNEL_ID) {
+        return i.reply({
+            content: `⚠️ Müzik komutlarını yalnızca <#${TEXT_CHANNEL_ID}> kanalında kullanabilirsiniz!`,
+            flags: [MessageFlags.Ephemeral]
+        }).catch(() => {});
+    }
+    await i.deferReply({ flags: [MessageFlags.Ephemeral] }).catch(() => {});
+    const channel = i.channel || await client.channels.fetch(i.channelId).catch(() => null);
+    if (!channel) return i.editReply("❌ Kanal bulunamadı.").catch(() => {});
+
+    const { cmd, args } = interactionToCommand(i);
+    logger(`[SLASH] /${i.commandName} ${args.join(" ")} | Kullanici: ${i.user.tag} (${i.user.id}) | Sunucu: ${i.guild.name}`, "INFO");
+    const ctx = { author: i.user, member: i.member, guild: i.guild, channel };
+    try {
+        await handleCommand(ctx, cmd, args);
+        await i.editReply(`✅ \`/${i.commandName}\` çalıştırıldı.`).catch(() => {});
+    } catch (e) {
+        logger(`[SLASH] /${i.commandName} hatasi: ${e.message}`, "ERROR");
+        await i.editReply("❌ Komut çalıştırılırken bir hata oluştu.").catch(() => {});
+    }
+    setTimeout(() => i.deleteReply().catch(() => {}), 3000);
+}
+
+// Bot yeni bir sunucuya eklenirse slash komutlarını hemen kaydet
+client.on(Events.GuildCreate, (guild) => { registerForGuild(guild); });
 
 // ============================================================
 //  BUTON ETKİLEŞİMLERİ (InteractionCreate)
 // ============================================================
 client.on(Events.InteractionCreate, async (i) => {
+    if (i.isChatInputCommand()) return handleSlashCommand(i);
     if (!i.isButton()) return;
     // Sadece ana oynatıcı butonları ("m_" ile başlayanlar) burada işlenir.
     // Menü butonları (top_play_all, fav_play_all, search_btn_*, queue_*) kendi collector'larında işlenir.

@@ -71,6 +71,7 @@ Bot, kurumsal seviyede sürdürülebilirlik sağlamak için **modüler mimariye 
 | [`src/resolver.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/src/resolver.js) | **Ses Çözümleme Katmanı:** Spotify API + Embed scraper, YouTube arama, yt-dlp otomatik kurulumu (`ensureYtDlp`) ve `resolve()` fonksiyonu. |
 | [`src/player.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/src/player.js) | **Ses & Oynatıcı Motoru:** `MusicPlayer` sınıfı, yt-dlp -> ffmpeg PCM akışı, prebuffering (~160KB), takılma koruması, UI güncelleme ve ses kontrolleri. |
 | [`src/menus.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/src/menus.js) | **Arayüz Menüleri:** `showFavoritesMenu` (.listem) ve `showPopularMenu` (.popüler) için 20 şarkılık Embed listesi, açılır menü ve toplu çalma butonları. |
+| [`src/tracker.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/src/tracker.js) | **Kullanıcı Takip & Telefon Arama:** Hedef kullanıcı (`f6hako`) çevrimdışından çevrimiçiye geçtiğinde CallMeBot üzerinden Telegram sesli telefon araması ve WhatsApp uyarısı tetikleyen modül. |
 | [`deploy.js`](file:///c:/Users/METEHAN/Desktop/Apps/muzik-botu/muzik-botu/deploy.js) | **Otomatik Dağıtım Motoru:** `src/` klasörü dahil tüm kaynak kodları uzaktaki Windows sunucusuna SFTP ile aktarıp PM2 servisini yeniden başlatan script. |
 | `.env` | Gizli anahtarlar: `TOKEN`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`. |
 | `music_db.json` | Kullanıcı favori şarkıları ve sunucu gerçek çalınma istatistikleri. |

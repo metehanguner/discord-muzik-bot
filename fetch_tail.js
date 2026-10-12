@@ -9,9 +9,9 @@ conn.on("error", (e) => {
     process.exit(1); 
 });
 conn.on("ready", () => {
-    conn.exec("powershell -Command \"Get-Content C:\\Users\\Administrator\\Desktop\\muzik-botu\\muzik-botu\\bot.log -Tail 80\"", (err, stream) => {
+    conn.exec("powershell -Command \"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content C:\\Users\\Administrator\\Desktop\\muzik-botu\\muzik-botu\\bot.log -Tail 500\"", (err, stream) => {
         if (err) { console.error(err); process.exit(1); }
-        stream.on("data", d => process.stdout.write(d.toString()));
+        stream.on("data", d => process.stdout.write(d.toString("utf8")));
         stream.on("close", () => { conn.end(); process.exit(0); });
     });
 }).connect({ 

@@ -25,6 +25,14 @@ const SPOTIFY_CLIENT_ID     = process.env.SPOTIFY_CLIENT_ID     || null;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || null;
 const SPOTIFY_RE            = /open\.spotify\.com\/(?:intl-[a-z0-9_-]+\/)?(track|playlist|album)\/([A-Za-z0-9]+)/i;
 
+// Kullanıcı Takip & Arama Konfigürasyonu
+const TRACK_USER_ID            = process.env.TRACK_USER_ID || null;
+const TRACK_USERNAME           = process.env.TRACK_USERNAME || "f6hako";
+const CALLMEBOT_TELEGRAM_USER  = process.env.CALLMEBOT_TELEGRAM_USER || null;
+const CALLMEBOT_WHATSAPP_PHONE = process.env.CALLMEBOT_WHATSAPP_PHONE || null;
+const CALLMEBOT_WHATSAPP_APIKEY= process.env.CALLMEBOT_WHATSAPP_APIKEY || null;
+const TRACK_COOLDOWN_MINUTES   = parseInt(process.env.TRACK_COOLDOWN_MINUTES, 10) || 10;
+
 module.exports = {
     ROOT_DIR,
     DISCORD_TOKEN,
@@ -38,5 +46,12 @@ module.exports = {
     CRASH_FILE,
     SPOTIFY_CLIENT_ID,
     SPOTIFY_CLIENT_SECRET,
-    SPOTIFY_RE
+    SPOTIFY_RE,
+    TRACK_USER_ID,
+    TRACK_USERNAME,
+    CALLMEBOT_TELEGRAM_USER,
+    CALLMEBOT_WHATSAPP_PHONE,
+    CALLMEBOT_WHATSAPP_APIKEY,
+    TRACK_COOLDOWN_MINUTES
 };
+
